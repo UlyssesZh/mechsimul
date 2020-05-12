@@ -1,19 +1,12 @@
-require 'matrix'
-require 'cmath'
+# frozen_string_literal: true
+
 require 'openrgss'
-require 'bigdecimal'
-require 'bigdecimal/math'
+require 'numo/narray'
+require 'numo/fftw'
 
-module AdditionRefinements
-	[Integer, Float, BigDecimal, Complex, Rational].each { _1.prepend self }
-	def + other
-		zero? && [Vector, Matrix].any? { other.is_a? _1 } ? other : super(other)
-	end
-end
-
-class Vector
+class Numo::NArray
 	def self.build(...)
-		new Array.new(...)
+		asarray Array.new(...)
 	end
 	def to_ary
 		to_a
@@ -27,34 +20,8 @@ class Array
 end
 
 module MyMath
-	include CMath
-	
-	module_function
-	
-	def fft_recursive signal
-		return signal if signal.size <= 1
-		evens_odds = signal.partition.with_index { _2.even? }
-		evens, odds = evens_odds.map { fft_recursive(_1) * 2 }
-		coef = Complex 0, -2 * PI / signal.size
-		evens.zip(odds).map.with_index do |(even, odd), i|
-			even + odd * exp(coef * i)
-		end
-	end
-	
-	def stretch signal, length
-		coef = signal.length / length.to_f
-		Array.new length do |i|
-			i *= coef
-			j = i.floor
-			k = j + 1
-			k = 0 if k == signal.length
-			signal[j] + (signal[k] - signal[j]) * (i % 1)
-		end
-	end
-	
-	def fft signal
-		fft_recursive stretch signal, 2**log2(signal.size).ceil
-	end
+	include Numo::NMath
+	include Numo::FFTW
 	
 	FORWARD_EULER = [[],[1]]
 	EXPLICIT_MIDPOINT = [[],[1/2.0],[0,1]]
@@ -65,7 +32,7 @@ module MyMath
 	RALSTON_3RD = [[],[1/2.0],[0,3/4.0],[2/9.0,1/3.0,4/9.0]]
 	SSPRK3 = [[],[1],[1/4.0,1/4.0],[1/6.0,1/6.0,2/3.0]]
 	CLASSIC_4TH = [[],[1/2.0],[0,1/2.0],[0,0,1],[1/6.0,1/3.0,1/3.0,1/6.0]]
-	RALSTON_4TH = [[],[0.4],[0.29697761,0.15875964],[0.21810040,-3.05096516,3.83286476],[0.17476028, -0.55148066, 1.20553560, 0.17118478]]
+	RALSTON_4TH = [[],[0.4],[0.29697761,0.15875964],[0.21810040,-3.05096516,3.83286476],[0.17476028,-0.55148066,1.20553560,0.17118478]]
 	THREE_EIGHTH_4TH = [[],[1/3.0],[-1/3.0,1],[1,-1,1],[1/8.0,3/8.0,3/8.0,1/8.0]]
 	
 	def runge_kutta initial, max_t, dt, (*pyramid, coefs), func
@@ -79,8 +46,9 @@ module MyMath
 	
 	def div x0, dx, f
 		n = x0.size
-		Array.new n do |i|
-			dv = Vector.basis(size: n, index: i) * dx
+		Numo::NArray.build n do |i|
+			dv = Numo::DFloat.zeros n
+			dv[i] = dx
 			(f.(x0 + dv) - f.(x0 - dv)) / (2 * dx)
 		end
 	end
@@ -88,7 +56,7 @@ module MyMath
 	def solve_hamiltonian n, qp0, max_t, dt, hamiltonian, dqp
 		runge_kutta qp0, max_t, dt, CLASSIC_4TH, ->t, qp do
 			dqpdt = div qp, dqp, -> { hamiltonian.(t, _1) }
-			Vector[*dqpdt[n...n*2], *dqpdt[0...n].map(&:-@)]
+			Numo::NArray[*dqpdt[n...n*2], *-dqpdt[0...n]]
 		end
 	end
 end
@@ -124,9 +92,9 @@ class Canvas
 	def trace t, ret
 		if @detect_period
 			if @initial
-				r = (ret - @initial).r
+				r = (ret - @initial).then { _1.inner _1 }
 				@last_r ||= Float::INFINITY
-				if @last_r < 5e-5 && @last_r <= r
+				if @last_r < 5e-9 && @last_r <= r
 					puts "Period found."
 					@detect_period = false
 				end
@@ -146,7 +114,7 @@ class Canvas
 			@sprite.bitmap.clear
 			@quo += 1
 		end
-		ret.zip @labels, @colors do |y, label, color|
+		ret.to_a.zip @labels, @colors do |y, label, color|
 			@sprite.bitmap.set_pixel x, (label.y = @mapping_y.(y)), color
 		end
 		@on_trace.(t, ret)

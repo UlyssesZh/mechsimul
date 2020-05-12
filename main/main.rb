@@ -17,12 +17,15 @@ rgss_main do
 	block = ->t, (q, p) do
 		if !$canvas.detect_period && !period_detected
 			period_detected = true
-			Thread.start { IO.write 'output.txt', fft($canvas.history).join(?\n) }
+			Thread.start do
+				IO.write 'output.txt', dft_1d(Numo::NArray.asarray($canvas.history), -1).to_a.join(?\n)
+			end
 		end
 	end
-	$canvas = Canvas.new 1,->t{t*40},->y{200*(y+2)},
+	$canvas = Canvas.new 1,->t{t*40},->y{100*y+384},
 	                     [Color.new(255,255,255),Color.new(255,255,0)],
 	                     block
 	$canvas.detect_period = true
-	solve_hamiltonian 1,Vector[PI-0.1,0.0],Float::INFINITY,1e-3,->t,(q,p){-cos(q)+p**2},1e-6
+	solve_hamiltonian 1,Numo::NArray[Math::PI-0.1,0.0],Float::INFINITY,
+	                  1e-3,->t,(q,p){-Math.cos(q)+p**2},1e-6
 end

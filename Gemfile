@@ -7,5 +7,6 @@ group :develop do
 	gem 'rdoc'
 end
 
-gem 'openrgss'
-gem 'cmath'
+gem 'openrgss', github: 'UlyssesZh/OpenRGSS'
+gem 'numo-narray'
+gem 'numo-fftw'
