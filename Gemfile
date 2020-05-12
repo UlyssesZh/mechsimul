@@ -8,5 +8,5 @@ group :develop do
 end
 
 gem 'openrgss', github: 'UlyssesZh/OpenRGSS'
-gem 'numo-narray'
+gem 'numo-narray', github: 'ruby-numo/numo-narray'
 gem 'numo-fftw'
